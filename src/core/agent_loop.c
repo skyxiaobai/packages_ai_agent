@@ -436,7 +436,7 @@ static char* handle_nl_fast_path(const char* text)
             char input[256];
             snprintf(input, sizeof(input),
                 "{\"keyword\":\"%.*s\"}", klen, kw);
-            char search_result[4096];
+            char search_result[2048];
             memset(search_result, 0, sizeof(search_result));
             tool_registry_execute("music_search", input, search_result, sizeof(search_result));
 
