@@ -213,7 +213,25 @@ int context_build_messages(const char *history_json, const char *user_message,
         buf[size - 1] = '\0';
         free(json_str);
     } else {
-        snprintf(buf, size, "[{\"role\":\"user\",\"content\":\"%s\"}]", user_message);
+        /* Fallback: build via cJSON to avoid JSON injection from
+         * unescaped user_message (quotes, backslashes, newlines). */
+        cJSON *fallback = cJSON_CreateArray();
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "role", "user");
+        cJSON_AddStringToObject(item, "content", user_message);
+        cJSON_AddItemToArray(fallback, item);
+        char *fb_str = cJSON_PrintUnformatted(fallback);
+        cJSON_Delete(fallback);
+        if (fb_str) {
+            strncpy(buf, fb_str, size - 1);
+            buf[size - 1] = '\0';
+            free(fb_str);
+        } else {
+            /* Double OOM — last resort, empty message */
+            strncpy(buf, "[{\"role\":\"user\",\"content\":\"\"}]",
+                    size - 1);
+            buf[size - 1] = '\0';
+        }
     }
 
     return OK;

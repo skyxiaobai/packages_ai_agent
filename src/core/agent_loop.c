@@ -622,16 +622,26 @@ static char* handle_slash_note(const agent_msg_t* msg)
     snprintf(path, sizeof(path), "%s/memory/daily/%s.md",
         AGENT_DATA_DIR, date_str);
 
-    char input[4096];
-    snprintf(input, sizeof(input),
-        "{\"path\":\"%s\",\"content\":\"%s %s\\n- %s %s\\n\"}",
-        path, "# ", date_str, time_str, note);
+    /* Build JSON via cJSON to properly escape user input (quotes,
+     * backslashes, newlines in note text). */
+    char content_buf[512];
+    snprintf(content_buf, sizeof(content_buf),
+        "# %s\n- %s %s\n", date_str, time_str, note);
+
+    cJSON *input_obj = cJSON_CreateObject();
+    cJSON_AddStringToObject(input_obj, "path", path);
+    cJSON_AddStringToObject(input_obj, "content", content_buf);
+    char *input = cJSON_PrintUnformatted(input_obj);
+    cJSON_Delete(input_obj);
 
     char* reply = calloc(1, 512);
-    if (reply) {
+    if (reply && input) {
         tool_registry_execute("write_file", input, reply, 512);
         snprintf(reply, 512, "已记录：%s", note);
+    } else if (reply) {
+        snprintf(reply, 512, "记录失败：内存不足");
     }
+    free(input);
     return reply;
 }
 
