@@ -22,10 +22,12 @@
 
 #include "tools/tool_registry.h"
 #ifdef CONFIG_AI_AGENT_MCP
-#include "tools/mcp_client.h"
 #include "tools/mcp_bridge.h"
+#include "tools/mcp_client.h"
 #endif
-#include "tools/tool_guard.h"
+#include "agent_compat.h"
+#include "agent_config.h"
+#include "tools/tool_camera.h"
 #include "tools/tool_control.h"
 #include "tools/tool_cron.h"
 #include "tools/tool_feishu_chat.h"
@@ -33,16 +35,14 @@
 #include "tools/tool_fetch_url.h"
 #include "tools/tool_files.h"
 #include "tools/tool_get_time.h"
+#include "tools/tool_guard.h"
 #include "tools/tool_health.h"
 #include "tools/tool_media.h"
 #include "tools/tool_proxyquickapp.h"
 #include "tools/tool_shell.h"
 #include "tools/tool_system.h"
 #include "tools/tool_vision.h"
-#include "tools/tool_camera.h"
 #include "tools/tool_web_search.h"
-#include "agent_compat.h"
-#include "agent_config.h"
 
 #include "cJSON.h"
 #include <pthread.h>
@@ -71,12 +71,12 @@ static bool s_tools_dirty = true;
 static pthread_mutex_t s_tools_mtx = PTHREAD_MUTEX_INITIALIZER;
 
 void tool_registry_register_provider(const char* name,
-                                     tool_provider_fn get_tools,
-                                     tool_executor_fn execute)
+    tool_provider_fn get_tools,
+    tool_executor_fn execute)
 {
     if (s_provider_count >= MAX_PROVIDERS) {
         syslog(LOG_ERR, "[%s] Provider registry full, cannot add '%s'\n",
-               TAG, name ? name : "(null)");
+            TAG, name ? name : "(null)");
         return;
     }
     s_providers[s_provider_count].name = name;
@@ -159,7 +159,13 @@ static void build_tools_json_locked(void)
         TAG, s_tool_count, s_provider_count);
 }
 
-void tool_registry_rebuild_json(void) { build_tools_json_locked(); }
+void tool_registry_rebuild_json(void)
+{
+    pthread_mutex_lock(&s_tools_mtx);
+    s_tools_dirty = true;
+    build_tools_json_locked();
+    pthread_mutex_unlock(&s_tools_mtx);
+}
 
 int tool_registry_init(void)
 {
@@ -297,11 +303,10 @@ int tool_registry_init(void)
         "For screen screenshots, use analyze_image instead.",
         TOOL_SCHEMA_BEGIN()
             TOOL_PARAM_STR("prompt",
-                "Optional question about what the camera sees") ","
-            TOOL_PARAM_ENUM("resolution",
+                "Optional question about what the camera sees") "," TOOL_PARAM_ENUM("resolution",
                 "Image resolution: low (320x180, faster) or high (1280x720)",
                 "\"low\",\"high\"")
-            TOOL_SCHEMA_END(),
+                TOOL_SCHEMA_END(),
         tool_camera_capture_execute);
 #endif
 
@@ -432,7 +437,7 @@ int tool_registry_init(void)
         "Does NOT play — call music_play with URL after.",
         TOOL_SCHEMA_BEGIN()
             TOOL_PARAM_STR("keyword", "Song name or artist to search")
-            TOOL_SCHEMA_END_REQUIRED("\"keyword\""),
+                TOOL_SCHEMA_END_REQUIRED("\"keyword\""),
         tool_music_search_execute);
 
     /* Music playback tools (URL mode) */
@@ -529,15 +534,15 @@ void tool_registry_cleanup(void)
     pthread_mutex_unlock(&s_tools_mtx);
 }
 
-int tool_registry_execute(const char *name, const char *input_json,
-    char *output, size_t output_size)
+int tool_registry_execute(const char* name, const char* input_json,
+    char* output, size_t output_size)
 {
     /* Security guard check before any tool execution */
     size_t input_len = input_json ? strlen(input_json) : 0;
     tool_guard_result_t guard = tool_guard_check(name, input_json, input_len);
 
     if (guard != GUARD_ALLOW) {
-        const char *reason = "unknown";
+        const char* reason = "unknown";
         switch (guard) {
         case GUARD_DENY_DISABLED:
             reason = "tool disabled by config";
@@ -555,10 +560,10 @@ int tool_registry_execute(const char *name, const char *input_json,
             break;
         }
         syslog(LOG_WARNING, "[%s] Tool '%s' blocked: %s\n",
-               TAG, name ? name : "(null)", reason);
+            TAG, name ? name : "(null)", reason);
         snprintf(output, output_size,
-                 "Error: tool '%s' blocked — %s",
-                 name ? name : "(null)", reason);
+            "Error: tool '%s' blocked — %s",
+            name ? name : "(null)", reason);
         return ERROR;
     }
 
@@ -591,7 +596,7 @@ int tool_registry_execute(const char *name, const char *input_json,
         int ret = s_providers[p].execute(name, input_json, output, output_size);
         if (ret == OK) {
             syslog(LOG_INFO, "[%s] Executed %s tool: %s\n",
-                   TAG, s_providers[p].name, name);
+                TAG, s_providers[p].name, name);
             tool_guard_record_call(name);
             return OK;
         }

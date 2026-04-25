@@ -15,14 +15,14 @@
  */
 
 #include "channels/cmd_llm.h"
-#include "infra/config_store.h"
-#include "infra/url_parse.h"
-#include "llm/llm_proxy.h"
-#include "llm/llm_router.h"
-#include "infra/http_proxy.h"
-#include "infra/vela_tls.h"
 #include "agent_compat.h"
 #include "agent_config.h"
+#include "infra/config_store.h"
+#include "infra/http_proxy.h"
+#include "infra/url_parse.h"
+#include "infra/vela_tls.h"
+#include "llm/llm_proxy.h"
+#include "llm/llm_router.h"
 
 #include <cJSON.h>
 #include <stdbool.h>
@@ -82,6 +82,12 @@ void cmd_set_llm(int argc, char** argv)
 
     const char* arg1 = argv[1];
 
+    /* parsed_url and full_path at function scope to avoid dangling pointers.
+     * url_parse() writes into parsed_url.host/port/path (fixed-size arrays),
+     * and host/port/path pointers below may reference them after the parse. */
+    parsed_url_t parsed_url;
+    char full_path[256];
+
     const char* host = NULL;
     const char* port = "443";
     const char* path = "/v1/chat/completions";
@@ -91,23 +97,21 @@ void cmd_set_llm(int argc, char** argv)
 
     /* Check if arg1 is a URL (http:// or https://) */
     if (strncmp(arg1, "http://", 7) == 0 || strncmp(arg1, "https://", 8) == 0) {
-        parsed_url_t parsed;
-        if (url_parse(arg1, &parsed) != 0) {
+        if (url_parse(arg1, &parsed_url) != 0) {
             printf("Invalid URL: %s\n", arg1);
             return;
         }
-        host = parsed.host;
-        port = parsed.port;
+        host = parsed_url.host;
+        port = parsed_url.port;
 
         /* Extract path from URL */
-        if (parsed.path[0] && parsed.path[1]) {
-            path = parsed.path;
+        if (parsed_url.path[0] && parsed_url.path[1]) {
+            path = parsed_url.path;
         } else {
             path = "/v1/chat/completions";
         }
 
         /* Append /chat/completions if path is just /v1 */
-        char full_path[256];
         if (strcmp(path, "/v1") == 0 || strcmp(path, "/v1/") == 0) {
             snprintf(full_path, sizeof(full_path), "/v1/chat/completions");
             path = full_path;
@@ -187,7 +191,6 @@ void cmd_set_llm(int argc, char** argv)
     }
 }
 
-
 /* ── cmd_set_vision_llm ──────────────────────────────────────── */
 
 void cmd_set_vision_llm(int argc, char** argv)
@@ -265,7 +268,6 @@ void cmd_set_vision_llm(int argc, char** argv)
     if (api_key)
         printf("Vision API key saved.\n");
 }
-
 
 /* ── list_models helpers ──────────────────────────────────────── */
 
@@ -498,7 +500,6 @@ void cmd_list_models(int argc, char** argv)
     list_models_print(data, free_only, keyword);
     cJSON_Delete(root);
 }
-
 
 /* ── Router commands ──────────────────────────────────────────── */
 

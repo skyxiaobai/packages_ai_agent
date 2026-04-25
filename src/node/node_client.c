@@ -389,6 +389,15 @@ static int do_connect(void)
                 goto fail;
             }
         }
+        /* Log certificate verification result (VERIFY_OPTIONAL — no CA bundle) */
+        {
+            uint32_t vflags = mbedtls_ssl_get_verify_result(&s_ws.ssl);
+            if (vflags != 0) {
+                syslog(LOG_WARNING, "[%s] TLS cert verify flags=0x%08x for %s "
+                                    "(no CA bundle)\n",
+                    TAG, vflags, s_gateway_host);
+            }
+        }
         s_ws.fd = s_ws.net.fd;
         s_ws.tls_init = true;
     } else {

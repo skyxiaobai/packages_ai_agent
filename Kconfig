@@ -44,7 +44,7 @@ config EXAMPLES_AI_AGENT_VELA_STACKSIZE
 
 config EXAMPLES_AI_AGENT_VELA_DATA_DIR
 	string "Persistent data directory"
-	default "/data/ai_agent"
+	default "/data/agent"
 	---help---
 		Base directory for config, memory and session files.
 		Must be on a writable filesystem (e.g. littlefs, romfs+ramdisk).
@@ -186,7 +186,7 @@ config AI_AGENT_TEST
 config AI_AGENT_TEST_IMAGE_DIR
 	string "Test image directory"
 	default "/data/ai_agent/test"
-	depends on AGENT_TEST
+	depends on AI_AGENT_TEST
 	---help---
 		Directory for test images used by the vision integration tests.
 		Images can be pre-pushed via adb or generated at runtime.
@@ -241,7 +241,7 @@ config AI_AGENT_SKILL_SYNC
 		at startup after network is connected. Requires Feishu app
 		credentials to be configured.
 
-if AGENT_SKILL_SYNC
+if AI_AGENT_SKILL_SYNC
 
 config AI_AGENT_SKILL_SYNC_APP_TOKEN
 	string "Bitable app_token"
@@ -277,7 +277,7 @@ config AI_AGENT_MCP_MAX_SERVERS
 	int "Max MCP remote servers"
 	default 4
 	range 1 8
-	depends on AGENT_MCP
+	depends on AI_AGENT_MCP
 	---help---
 		Maximum number of remote MCP servers. Each server slot
 		uses ~456 bytes BSS. Reduce on memory-constrained boards.
@@ -286,7 +286,7 @@ config AI_AGENT_MCP_MAX_TOOLS
 	int "Max MCP remote tools"
 	default 16
 	range 4 64
-	depends on AGENT_MCP
+	depends on AI_AGENT_MCP
 	---help---
 		Maximum cached remote tools across all MCP servers.
 		Each tool slot uses ~452 bytes BSS. Reduce on

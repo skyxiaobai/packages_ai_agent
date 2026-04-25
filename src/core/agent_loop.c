@@ -22,6 +22,8 @@
 
 #include <inttypes.h>
 
+#include "agent_compat.h"
+#include "agent_config.h"
 #include "core/agent_loop.h"
 #include "core/agent_mem.h"
 #include "core/agent_trace.h"
@@ -34,8 +36,6 @@
 #include "tools/skill_loader.h"
 #include "tools/tool_guard.h"
 #include "tools/tool_registry.h"
-#include "agent_compat.h"
-#include "agent_config.h"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -201,8 +201,14 @@ static void add_tool_result_messages(cJSON* messages,
     if (n == 1) {
         const llm_tool_call_t* call = &resp->calls[0];
 
-        syslog(LOG_INFO, "[%s] Tool call: %s args=%.500s\n", TAG,
-            call->name, call->input ? call->input : "(null)");
+        syslog(LOG_INFO, "[%s] Tool call: %s args=(sanitized)\n", TAG,
+            call->name);
+        {
+            char safe_args[512];
+            tool_guard_sanitize_log(call->input, safe_args, sizeof(safe_args));
+            syslog(LOG_DEBUG, "[%s] Tool %s sanitized args=%.500s\n", TAG,
+                call->name, safe_args);
+        }
         tool_output[0] = '\0';
         char* patched = inject_cron_context(
             call->name, call->input, msg_channel, msg_chat_id);
@@ -335,23 +341,23 @@ typedef struct {
     size_t output_size;
 } nl_intent_t;
 
-static const char* kw_time[]       = { "几点了", "什么时间", "what time", "几点钟", NULL };
-static const char* kw_battery[]    = { "电量多少", "电池电量", "battery", NULL };
-static const char* kw_heartrate[]  = { "心率多少", "heart rate", "心率是多", NULL };
-static const char* kw_steps[]      = { "走了多少步", "今天走了多少", "steps", "步数", NULL };
-static const char* kw_pause[]      = { "暂停音乐", "暂停播放", "pause music", NULL };
-static const char* kw_stop[]       = { "停止播放", "停止音乐", "stop music", NULL };
-static const char* kw_resume[]     = { "继续播放", "resume", NULL };
+static const char* kw_time[] = { "几点了", "什么时间", "what time", "几点钟", NULL };
+static const char* kw_battery[] = { "电量多少", "电池电量", "battery", NULL };
+static const char* kw_heartrate[] = { "心率多少", "heart rate", "心率是多", NULL };
+static const char* kw_steps[] = { "走了多少步", "今天走了多少", "steps", "步数", NULL };
+static const char* kw_pause[] = { "暂停音乐", "暂停播放", "pause music", NULL };
+static const char* kw_stop[] = { "停止播放", "停止音乐", "stop music", NULL };
+static const char* kw_resume[] = { "继续播放", "resume", NULL };
 
 static const nl_intent_t s_intents[] = {
-    { kw_time,      "get_current_time", "{}",  256  },
-    { kw_battery,   "get_battery",      "{}",  512  },
-    { kw_heartrate, "get_heartrate",    "{}",  256  },
-    { kw_steps,     "get_steps",        "{}",  256  },
-    { kw_pause,     "music_pause",      "{}",  256  },
-    { kw_stop,      "music_stop",       "{}",  256  },
-    { kw_resume,    "music_resume",     "{}",  256  },
-    { NULL,         NULL,               NULL,  0    },
+    { kw_time, "get_current_time", "{}", 256 },
+    { kw_battery, "get_battery", "{}", 512 },
+    { kw_heartrate, "get_heartrate", "{}", 256 },
+    { kw_steps, "get_steps", "{}", 256 },
+    { kw_pause, "music_pause", "{}", 256 },
+    { kw_stop, "music_stop", "{}", 256 },
+    { kw_resume, "music_resume", "{}", 256 },
+    { NULL, NULL, NULL, 0 },
 };
 
 static char* handle_nl_fast_path(const char* text)
@@ -378,7 +384,8 @@ static char* handle_nl_fast_path(const char* text)
 
     /* Skill list (special: no tool call) */
     static const char* kw_skill[] = {
-        "技能列表", "有什么技能", "list skill", NULL };
+        "技能列表", "有什么技能", "list skill", NULL
+    };
     if (contains_any(text, kw_skill)) {
         char buf[2048];
         size_t n = skill_loader_build_summary(buf, sizeof(buf));
@@ -388,7 +395,8 @@ static char* handle_nl_fast_path(const char* text)
 
     /* Weather (special: needs city extraction) */
     static const char* kw_weather[] = {
-        "天气怎么样", "weather", "天气如何", NULL };
+        "天气怎么样", "weather", "天气如何", NULL
+    };
     if (contains_any(text, kw_weather)) {
         char safe_city[64];
         strncpy(safe_city, "Beijing", sizeof(safe_city) - 1);
@@ -401,7 +409,8 @@ static char* handle_nl_fast_path(const char* text)
                 if (*s != '"' && *s != '\\' && *s != ' ')
                     safe_city[ci++] = *s;
             }
-            if (ci > 0) safe_city[ci] = '\0';
+            if (ci > 0)
+                safe_city[ci] = '\0';
         }
 
         char input[256];
@@ -424,10 +433,22 @@ static char* handle_nl_fast_path(const char* text)
     if (contains_any(text, kw_play)) {
         const char* kw = NULL;
         const char* p = strstr(text, "播放");
-        if (p) { p += strlen("播放"); while (*p == ' ') p++; if (*p) kw = p; }
+        if (p) {
+            p += strlen("播放");
+            while (*p == ' ')
+                p++;
+            if (*p)
+                kw = p;
+        }
         if (!kw) {
             p = strcasestr(text, "play ");
-            if (p) { p += 5; while (*p == ' ') p++; if (*p) kw = p; }
+            if (p) {
+                p += 5;
+                while (*p == ' ')
+                    p++;
+                if (*p)
+                    kw = p;
+            }
         }
         if (kw) {
             int klen = 0;
@@ -628,10 +649,10 @@ static char* handle_slash_note(const agent_msg_t* msg)
     snprintf(content_buf, sizeof(content_buf),
         "# %s\n- %s %s\n", date_str, time_str, note);
 
-    cJSON *input_obj = cJSON_CreateObject();
+    cJSON* input_obj = cJSON_CreateObject();
     cJSON_AddStringToObject(input_obj, "path", path);
     cJSON_AddStringToObject(input_obj, "content", content_buf);
-    char *input = cJSON_PrintUnformatted(input_obj);
+    char* input = cJSON_PrintUnformatted(input_obj);
     cJSON_Delete(input_obj);
 
     char* reply = calloc(1, 512);
@@ -1291,13 +1312,14 @@ static char* run_react_loop(const char* sys_prompt, cJSON* messages,
                 bool is_skill_read = false;
                 if (strcmp(resp.calls[0].name, "read_file") == 0
                     && resp.calls[0].input != NULL) {
-                    cJSON *input_obj = cJSON_Parse(resp.calls[0].input);
+                    cJSON* input_obj = cJSON_Parse(resp.calls[0].input);
                     if (input_obj) {
-                        cJSON *path_obj = cJSON_GetObjectItem(input_obj, "path");
+                        cJSON* path_obj = cJSON_GetObjectItem(input_obj, "path");
                         if (path_obj && cJSON_IsString(path_obj)
                             && strncmp(path_obj->valuestring,
-                                AGENT_SKILLS_DIR,
-                                strlen(AGENT_SKILLS_DIR)) == 0) {
+                                   AGENT_SKILLS_DIR,
+                                   strlen(AGENT_SKILLS_DIR))
+                                == 0) {
                             is_skill_read = true;
                         }
                         cJSON_Delete(input_obj);

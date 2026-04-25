@@ -15,9 +15,9 @@
  */
 
 #include "infra/vela_tls.h"
-#include "infra/http_proxy.h"
 #include "agent_compat.h"
 #include "agent_config.h"
+#include "infra/http_proxy.h"
 
 #ifdef CONFIG_AI_AGENT_NET_RPMSG
 #include "network/network_manager.h"
@@ -56,7 +56,7 @@ static int simple_entropy_func(void* data, unsigned char* output, size_t len)
      * Returning an error forces the TLS handshake to fail safely
      * rather than proceeding with predictable key material. */
     syslog(LOG_ERR, "[vela_tls] CRITICAL: No secure entropy source available\n");
-    return -1;  /* Generic error - TLS handshake will fail safely */
+    return -1; /* Generic error - TLS handshake will fail safely */
 }
 
 static const char* TAG = "vela_tls";
@@ -89,12 +89,12 @@ static size_t decode_chunked(char* buf, size_t len)
             endptr++;
 
         if (endptr != crlf || chunk_sz < 0 || chunk_sz > (long)(end - crlf - 2))
-            break;  /* malformed or oversized chunk header */
+            break; /* malformed or oversized chunk header */
 
         if (chunk_sz == 0)
-            break;  /* final chunk */
+            break; /* final chunk */
 
-        src = crlf + 2;  /* skip past chunk-size CRLF */
+        src = crlf + 2; /* skip past chunk-size CRLF */
 
         /* Clamp to available data */
         if (src + chunk_sz > end)
@@ -393,6 +393,18 @@ static int tls_ctx_connect(tls_ctx_t* ctx, const char* host, const char* port)
     syslog(LOG_INFO, "[%s] Handshake OK: %s / %s\n", TAG, mbedtls_ssl_get_version(&ctx->ssl),
         mbedtls_ssl_get_ciphersuite(&ctx->ssl));
 
+    /* Log certificate verification result.
+     * VERIFY_OPTIONAL means handshake succeeds even if cert fails,
+     * but we log the result so operators can detect MITM attempts. */
+    {
+        uint32_t flags = mbedtls_ssl_get_verify_result(&ctx->ssl);
+        if (flags != 0) {
+            syslog(LOG_WARNING, "[%s] TLS cert verify flags=0x%08x for %s "
+                                "(no CA bundle — VERIFY_OPTIONAL)\n",
+                TAG, flags, host);
+        }
+    }
+
     return 0;
 }
 
@@ -484,7 +496,7 @@ static int tls_write_request(tls_ctx_t* ctx,
  * Returns HTTP status code; writes body into resp_buf (NUL-terminated).
  * Handles Transfer-Encoding: chunked and Content-Length.
  */
-#define TLS_RAW_BUF_SIZE 8192  /* 8KB: enough for HTTP headers + initial body */
+#define TLS_RAW_BUF_SIZE 8192 /* 8KB: enough for HTTP headers + initial body */
 
 /* Number of static raw buffers — at most 2, scaled to pool size.
  * Each buffer is 8KB; pool=1 uses 1 buffer, pool>=2 uses 2. */
@@ -571,7 +583,7 @@ static int tls_read_response(tls_ctx_t* ctx, char* resp_buf, size_t resp_cap,
 
     /* Determine keep-alive from Connection header (default true for HTTP/1.1) */
     if (out_keep_alive) {
-        *out_keep_alive = true;  /* HTTP/1.1 default */
+        *out_keep_alive = true; /* HTTP/1.1 default */
         char* conn_hdr = strcasestr(raw, "Connection:");
         if (conn_hdr && conn_hdr < body_start) {
             *out_keep_alive = (strcasestr(conn_hdr, "keep-alive") != NULL);

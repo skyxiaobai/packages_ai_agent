@@ -124,6 +124,8 @@ CSRCS += src/infra/heartbeat.c
 CSRCS += src/infra/network_manager.c
 CSRCS += src/infra/http_proxy.c
 CSRCS += src/infra/vela_tls.c
+CSRCS += src/infra/url_parse.c
+CSRCS += src/infra/a2a_handler.c
 
 # node/ - 分布式节点
 ifeq ($(CONFIG_AI_AGENT_NODE),y)
@@ -136,8 +138,26 @@ CSRCS += src/stubs.c
 
 CSRCS += src/ui/qrcode_display.c
 
+ifeq ($(CONFIG_AI_AGENT_BLE_GATT),y)
+CSRCS += src/infra/ble_gatt.c
+endif
+
+ifeq ($(CONFIG_AI_AGENT_BLE_NET),y)
+CSRCS += src/infra/ble_net.c
+endif
+
+ifeq ($(CONFIG_AI_AGENT_XIAOZHI),y)
+CSRCS += src/channels/xiaozhi_channel.c
+CSRCS += src/channels/xiaozhi_opus.c
+CSRCS += src/channels/xiaozhi_udp.c
+endif
+
 ifeq ($(CONFIG_AI_AGENT_LVGL_UI),y)
-CSRCS += src/lvgl_ui/lvgl_ui_channel.c
+CSRCS += src/ui/lvgl_ui_channel.c
+endif
+
+ifeq ($(CONFIG_AI_AGENT_CAMERA),y)
+CSRCS += src/tools/tool_camera.c
 endif
 
 ifeq ($(CONFIG_AI_AGENT_TEST),y)
